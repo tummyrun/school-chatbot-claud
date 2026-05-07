@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Keyword Chatbot</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #1a1a1f;
+    --border: #2e2e38;
+    --accent: #7effa0;
+    --text: #f0f0f0;
+    --muted: #888;
+    --bot-bg: #1f1f28;
+    --user-bg: #1a2e1e;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  .chat-container {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    height: 90vh;
+    max-height: 680px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(126,255,160,0.07);
+  }
+
+  .header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .dot {
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  .header-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+
+  .header-sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .message {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: fadeUp 0.25s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.bot {
+    align-self: flex-start;
+    background: var(--bot-bg);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .message.user {
+    align-self: flex-end;
+    background: var(--user-bg);
+    border: 1px solid rgba(126,255,160,0.2);
+    border-bottom-right-radius: 4px;
+    color: var(--accent);
+  }
+
+  .message .label {
+    font-size: 9px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .message.user .label { text-align: right; }
+
+  .hint-bar {
+    padding: 10px 16px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .hint {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: 'DM Mono', monospace;
+    background: none;
+  }
+
+  .hint:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(126,255,160,0.05);
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+
+  button.send-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    letter-spacing: 0.03em;
+  }
+
+  button.send-btn:hover  { opacity: 0.85; }
+  button.send-btn:active { transform: scale(0.96); }
+</style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="header">
+    <div class="dot"></div>
+    <div>
+      <div class="header-title">KEYWORD BOT</div>
+      <div class="header-sub">keyword-triggered responses</div>
+    </div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="message bot">
+      <div class="label">BOT</div>
+      Type a message containing a keyword to get a response.
+    </div>
+  </div>
+
+  <div class="hint-bar">
+    <button class="hint" onclick="sendHint('hello')">hello</button>
+    <button class="hint" onclick="sendHint('location')">location</button>
+    <button class="hint" onclick="sendHint('schedule')">schedule</button>
+  </div>
+
+  <div class="input-row">
+    <input id="userInput" type="text" placeholder="Type your message..."
+           onkeydown="if(event.key==='Enter') sendMessage()" />
+    <button class="send-btn" onclick="sendMessage()">SEND</button>
+  </div>
+</div>
+
+<script>
+  // ─── KEYWORD DATA ────────────────────────────────────────────────
+  // Add or edit your keyword/response pairs here.
+  const keywords = [
+    { keyword: "hello",    response: "Hi! How can I help?" },
+    { keyword: "location", response: "We are in Bangkok" },
+    { keyword: "schedule", response: "School starts at 8:00" },
+  ];
+  // ─────────────────────────────────────────────────────────────────
+
+  function getResponse(input) {
+    const lower = input.toLowerCase();
+    for (const entry of keywords) {
+      if (lower.includes(entry.keyword)) return entry.response;
+    }
+    return "Sorry, I don't recognise that keyword. Try: " +
+           keywords.map(k => k.keyword).join(", ") + ".";
+  }
+
+  function addMessage(text, who) {
+    const box = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = `message ${who}`;
+    div.innerHTML = `<div class="label">${who === 'user' ? 'YOU' : 'BOT'}</div>${text}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('userInput');
+    const text  = input.value.trim();
+    if (!text) return;
+    addMessage(text, 'user');
+    input.value = '';
+    setTimeout(() => addMessage(getResponse(text), 'bot'), 350);
+  }
+
+  function sendHint(kw) {
+    document.getElementById('userInput').value = kw;
+    sendMessage();
+  }
+</script>
+</body>
+</html>

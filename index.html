@@ -159,7 +159,35 @@
     border-bottom-right-radius: 4px;
   }
 
-  /* Suggestion chips inside bubble */
+  /* Typing indicator */
+  .typing-bubble {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+    padding: 13px 18px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .typing-bubble span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-light);
+    display: inline-block;
+    animation: bounce 1.2s infinite;
+  }
+
+  .typing-bubble span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-bubble span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30%            { transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* Suggestion chips */
   .suggestions {
     margin-top: 10px;
     display: flex;
@@ -326,59 +354,70 @@
 
 <script>
   // ─── KEYWORD DATA ─────────────────────────────────────────────
-  // keyword : the word/phrase to match against user input
-  // question: the full question shown as a suggestion chip
-  // response: the answer sent when matched
+  // keywords : array of words/phrases — ANY of them will trigger this entry
+  // question : the full question shown as a suggestion chip
+  // response : the answer sent when matched
   const keywords = [
     {
-      keyword:  "hello",
-      question: "Hello",
+      keywords: ["hello", "hi", "hey", "good morning", "good afternoon"],
+      question: "Hello / Greeting",
       response: "Hello! How can I assist you today?"
     },
     {
-      keyword:  "location",
+      keywords: ["location", "where", "address", "located", "find you"],
       question: "Where is the school located?",
       response: "📍 We are located in Bangkok."
     },
     {
-      keyword:  "schedule",
+      keywords: ["schedule", "time", "start", "class", "when", "open"],
       question: "What time does school start?",
       response: "🕗 School starts at 8:00 AM."
     },
   ];
+
+  // Top questions shown as fallback when nothing matches at all
+  const TOP_FALLBACK_COUNT = 3;
   // ──────────────────────────────────────────────────────────────
 
-  // Split input into individual words for partial matching
   function getWords(str) {
     return str.toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  // Check if any word in the user input appears inside the keyword string
-  function partialMatch(userInput, keyword) {
-    const inputWords = getWords(userInput);
-    const kw = keyword.toLowerCase();
-    return inputWords.some(word => kw.includes(word) || word.includes(kw.split(' ')[0]));
+  function matchesEntry(input, entry) {
+    const lower = input.toLowerCase();
+    return entry.keywords.some(kw => lower.includes(kw.toLowerCase()));
   }
 
-  function getResponse(input) {
-    const lower = input.toLowerCase();
+  function partialMatchesEntry(input, entry) {
+    const inputWords = getWords(input);
+    return entry.keywords.some(kw =>
+      inputWords.some(word => kw.toLowerCase().includes(word) || word.includes(kw.toLowerCase().split(' ')[0]))
+    );
+  }
 
-    // 1. Try exact/contains match first
+  function getResult(input) {
+    // 1. Full keyword match
     for (const entry of keywords) {
-      if (lower.includes(entry.keyword.toLowerCase())) {
+      if (matchesEntry(input, entry)) {
         return { type: 'answer', text: entry.response };
       }
     }
 
-    // 2. Try partial word match — collect similar keywords
-    const matches = keywords.filter(entry => partialMatch(lower, entry.keyword));
-
-    if (matches.length > 0) {
-      return { type: 'suggest', matches };
+    // 2. Partial word match — show only similar suggestions
+    const partial = keywords.filter(entry => partialMatchesEntry(input, entry));
+    if (partial.length > 0) {
+      return { type: 'suggest', matches: partial };
     }
 
-    // 3. No match at all
-    return { type: 'none' };
+    // 3. No match — show top fallback questions
+    return { type: 'fallback' };
+  }
+
+  // ── DOM helpers ──────────────────────────────────────────────
+
+  function scrollBottom() {
+    const box = document.getElementById('messages');
+    box.scrollTop = box.scrollHeight;
   }
 
   function addMessage(text, who) {
@@ -387,34 +426,48 @@
     row.className = `msg-row ${who}`;
     row.innerHTML = `<div class="bubble">${text}</div>`;
     box.appendChild(row);
-    box.scrollTop = box.scrollHeight;
+    scrollBottom();
     return row;
   }
 
-  function addSuggestionMessage(matches) {
+  function showTyping() {
     const box = document.getElementById('messages');
     const row = document.createElement('div');
     row.className = 'msg-row bot';
+    row.id = 'typing-row';
+    row.innerHTML = `
+      <div class="typing-bubble">
+        <span></span><span></span><span></span>
+      </div>`;
+    box.appendChild(row);
+    scrollBottom();
+  }
 
+  function hideTyping() {
+    const el = document.getElementById('typing-row');
+    if (el) el.remove();
+  }
+
+  function addSuggestions(matches, intro) {
+    const box = document.getElementById('messages');
+    const row = document.createElement('div');
+    row.className = 'msg-row bot';
     const chips = matches.map(m =>
-      `<button class="suggestion-chip" onclick="sendHint('${m.keyword}')">${m.question}</button>`
+      `<button class="suggestion-chip" onclick="sendHint('${m.keywords[0]}')">${m.question}</button>`
     ).join('');
-
     row.innerHTML = `
       <div class="bubble">
-        I'm not sure what you mean. Did you mean one of these?
+        ${intro}
         <div class="suggestions">
           <span class="suggestions-label">Suggestions</span>
           ${chips}
         </div>
       </div>`;
     box.appendChild(row);
-    box.scrollTop = box.scrollHeight;
+    scrollBottom();
   }
 
-  function addNoMatchMessage() {
-    addMessage("I couldn't find anything related to that. Please try rephrasing your question.", 'bot');
-  }
+  // ── Main logic ───────────────────────────────────────────────
 
   function sendMessage() {
     const input = document.getElementById('userInput');
@@ -423,17 +476,29 @@
 
     addMessage(text, 'user');
     input.value = '';
+    input.disabled = true;
+
+    showTyping();
 
     setTimeout(() => {
-      const result = getResponse(text);
+      hideTyping();
+      input.disabled = false;
+      input.focus();
+
+      const result = getResult(text);
+
       if (result.type === 'answer') {
         addMessage(result.text, 'bot');
+
       } else if (result.type === 'suggest') {
-        addSuggestionMessage(result.matches);
+        addSuggestions(result.matches, "I'm not sure what you mean. Did you mean one of these?");
+
       } else {
-        addNoMatchMessage();
+        // Fallback — show most common questions
+        const fallback = keywords.slice(0, TOP_FALLBACK_COUNT);
+        addSuggestions(fallback, "I couldn't find anything related to that. Here are some things I can help with:");
       }
-    }, 350);
+    }, 900);
   }
 
   function sendHint(kw) {

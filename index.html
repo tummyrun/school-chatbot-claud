@@ -225,6 +225,39 @@
     border-color: var(--green-dark);
   }
 
+  /* Submit unanswered button */
+  .submit-row {
+    margin-top: 10px;
+  }
+
+  .submit-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-mid);
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 7px 12px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: all 0.15s;
+  }
+
+  .submit-btn:hover {
+    border-color: var(--green-mid);
+    color: var(--green-dark);
+    background: var(--green-light);
+  }
+
+  /* Loading state */
+  .loading-text {
+    font-size: 13px;
+    color: var(--text-light);
+    font-style: italic;
+  }
+
   /* Quick replies */
   .quick-bar {
     padding: 12px 18px;
@@ -329,20 +362,17 @@
 
   <div class="messages" id="messages">
     <div class="msg-row bot">
-      <div class="bubble">Hello! I'm your Student Assistant. Feel free to ask me anything about the school.</div>
+      <div class="bubble loading-text">Loading questions from server...</div>
     </div>
   </div>
 
-  <div class="quick-bar">
-    <span class="quick-label">Quick questions</span>
-    <button class="quick-btn" onclick="sendHint('hello')">Greeting</button>
-    <button class="quick-btn" onclick="sendHint('location')">📍 Location</button>
-    <button class="quick-btn" onclick="sendHint('schedule')">🕗 Schedule</button>
+  <div class="quick-bar" id="quickBar">
+    <span class="quick-label">Loading...</span>
   </div>
 
   <div class="input-area">
     <input id="userInput" type="text" placeholder="Ask a question..."
-           onkeydown="if(event.key==='Enter') sendMessage()" />
+           onkeydown="if(event.key==='Enter') sendMessage()" disabled />
     <button class="send-btn" onclick="sendMessage()">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
@@ -353,32 +383,57 @@
 </div>
 
 <script>
-  // ─── KEYWORD DATA ─────────────────────────────────────────────
-  // keywords : array of words/phrases — ANY of them will trigger this entry
-  // question : the full question shown as a suggestion chip
-  // response : the answer sent when matched
-  const keywords = [
-    {
-      keywords: ["hello", "hi", "hey", "good morning", "good afternoon"],
-      question: "Hello / Greeting",
-      response: "Hello! How can I assist you today?"
-    },
-    {
-      keywords: ["location", "where", "address", "located", "find you"],
-      question: "Where is the school located?",
-      response: "📍 We are located in Bangkok."
-    },
-    {
-      keywords: ["schedule", "time", "start", "class", "when", "open"],
-      question: "What time does school start?",
-      response: "🕗 School starts at 8:00 AM."
-    },
-  ];
-
-  // Top questions shown as fallback when nothing matches at all
+  // ─── CONFIG ───────────────────────────────────────────────────
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyNtLx2xWgAkWV15iK-rimbVAZNlCCXfnapdPJMq-LI2WepRs-VCL2P694tCTaQkdl-wA/exec";
   const TOP_FALLBACK_COUNT = 3;
   // ──────────────────────────────────────────────────────────────
 
+  let keywordData = []; // loaded from Google Sheets
+
+  // ── Load data from Google Sheets on startup ──────────────────
+  async function loadKeywords() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL);
+      const data = await res.json();
+
+      // Group rows by response so multiple keywords share one entry
+      const grouped = {};
+      data.forEach(({ keyword, response }) => {
+        if (!grouped[response]) {
+          grouped[response] = { keywords: [], question: keyword, response };
+        }
+        grouped[response].keywords.push(keyword);
+      });
+
+      keywordData = Object.values(grouped);
+
+      // Clear loading message and show welcome
+      const box = document.getElementById('messages');
+      box.innerHTML = '';
+      addMessage("Hello! I'm your Student Assistant. Feel free to ask me anything about the school.", 'bot');
+
+      // Build quick reply buttons from first 3 entries
+      buildQuickBar();
+
+      document.getElementById('userInput').disabled = false;
+      document.getElementById('userInput').focus();
+
+    } catch (err) {
+      const box = document.getElementById('messages');
+      box.innerHTML = '';
+      addMessage("⚠️ Could not connect to the server. Please try again later.", 'bot');
+      console.error(err);
+    }
+  }
+
+  function buildQuickBar() {
+    const bar = document.getElementById('quickBar');
+    const top = keywordData.slice(0, 3);
+    bar.innerHTML = `<span class="quick-label">Quick questions</span>` +
+      top.map(e => `<button class="quick-btn" onclick="sendHint('${e.keywords[0]}')">${e.question}</button>`).join('');
+  }
+
+  // ── Matching logic ───────────────────────────────────────────
   function getWords(str) {
     return str.toLowerCase().split(/\s+/).filter(Boolean);
   }
@@ -391,30 +446,41 @@
   function partialMatchesEntry(input, entry) {
     const inputWords = getWords(input);
     return entry.keywords.some(kw =>
-      inputWords.some(word => kw.toLowerCase().includes(word) || word.includes(kw.toLowerCase().split(' ')[0]))
+      inputWords.some(word =>
+        kw.toLowerCase().includes(word) || word.includes(kw.toLowerCase().split(' ')[0])
+      )
     );
   }
 
   function getResult(input) {
-    // 1. Full keyword match
-    for (const entry of keywords) {
+    // 1. Full match
+    for (const entry of keywordData) {
       if (matchesEntry(input, entry)) {
         return { type: 'answer', text: entry.response };
       }
     }
+    // 2. Partial match
+    const partial = keywordData.filter(e => partialMatchesEntry(input, e));
+    if (partial.length > 0) return { type: 'suggest', matches: partial };
 
-    // 2. Partial word match — show only similar suggestions
-    const partial = keywords.filter(entry => partialMatchesEntry(input, entry));
-    if (partial.length > 0) {
-      return { type: 'suggest', matches: partial };
-    }
-
-    // 3. No match — show top fallback questions
+    // 3. No match — fallback
     return { type: 'fallback' };
   }
 
-  // ── DOM helpers ──────────────────────────────────────────────
+  // ── Submit unanswered question to Google Sheets ──────────────
+  async function submitUnanswered(question) {
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (err) {
+      console.error('Failed to submit unanswered question:', err);
+    }
+  }
 
+  // ── DOM helpers ──────────────────────────────────────────────
   function scrollBottom() {
     const box = document.getElementById('messages');
     box.scrollTop = box.scrollHeight;
@@ -427,7 +493,6 @@
     row.innerHTML = `<div class="bubble">${text}</div>`;
     box.appendChild(row);
     scrollBottom();
-    return row;
   }
 
   function showTyping() {
@@ -435,10 +500,7 @@
     const row = document.createElement('div');
     row.className = 'msg-row bot';
     row.id = 'typing-row';
-    row.innerHTML = `
-      <div class="typing-bubble">
-        <span></span><span></span><span></span>
-      </div>`;
+    row.innerHTML = `<div class="typing-bubble"><span></span><span></span><span></span></div>`;
     box.appendChild(row);
     scrollBottom();
   }
@@ -448,13 +510,23 @@
     if (el) el.remove();
   }
 
-  function addSuggestions(matches, intro) {
+  function addSuggestions(matches, intro, showSubmit, originalQuestion) {
     const box = document.getElementById('messages');
     const row = document.createElement('div');
     row.className = 'msg-row bot';
+
     const chips = matches.map(m =>
       `<button class="suggestion-chip" onclick="sendHint('${m.keywords[0]}')">${m.question}</button>`
     ).join('');
+
+    const submitHtml = showSubmit
+      ? `<div class="submit-row">
+           <button class="submit-btn" onclick="handleSubmitUnanswered('${originalQuestion.replace(/'/g, "\\'")}', this)">
+             📩 Submit this question to the team
+           </button>
+         </div>`
+      : '';
+
     row.innerHTML = `
       <div class="bubble">
         ${intro}
@@ -462,17 +534,26 @@
           <span class="suggestions-label">Suggestions</span>
           ${chips}
         </div>
+        ${submitHtml}
       </div>`;
     box.appendChild(row);
     scrollBottom();
   }
 
-  // ── Main logic ───────────────────────────────────────────────
+  async function handleSubmitUnanswered(question, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    await submitUnanswered(question);
+    btn.textContent = '✅ Submitted! We\'ll add it soon.';
+    btn.style.color = 'var(--green-dark)';
+    btn.style.borderColor = 'var(--green-accent)';
+  }
 
+  // ── Main send logic ──────────────────────────────────────────
   function sendMessage() {
     const input = document.getElementById('userInput');
     const text  = input.value.trim();
-    if (!text) return;
+    if (!text || input.disabled) return;
 
     addMessage(text, 'user');
     input.value = '';
@@ -491,12 +572,21 @@
         addMessage(result.text, 'bot');
 
       } else if (result.type === 'suggest') {
-        addSuggestions(result.matches, "I'm not sure what you mean. Did you mean one of these?");
+        addSuggestions(
+          result.matches,
+          "I'm not sure what you mean. Did you mean one of these?",
+          true,
+          text
+        );
 
       } else {
-        // Fallback — show most common questions
-        const fallback = keywords.slice(0, TOP_FALLBACK_COUNT);
-        addSuggestions(fallback, "I couldn't find anything related to that. Here are some things I can help with:");
+        const fallback = keywordData.slice(0, TOP_FALLBACK_COUNT);
+        addSuggestions(
+          fallback,
+          "I couldn't find anything related to that. Here are some things I can help with:",
+          true,
+          text
+        );
       }
     }, 900);
   }
@@ -505,6 +595,9 @@
     document.getElementById('userInput').value = kw;
     sendMessage();
   }
+
+  // ── Init ─────────────────────────────────────────────────────
+  loadKeywords();
 </script>
 
 </body>

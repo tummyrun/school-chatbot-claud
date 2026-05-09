@@ -384,7 +384,7 @@
 
 <script>
   // ─── CONFIG ───────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyNtLx2xWgAkWV15iK-rimbVAZNlCCXfnapdPJMq-LI2WepRs-VCL2P694tCTaQkdl-wA/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzbDlx2b5alQ6ALgxDo1Tl3exbPTAhdVeUkAP6456c4B5IBZqT-bhM5Pxv5DUNERw7qrA/exec";
   const TOP_FALLBACK_COUNT = 3;
   // ──────────────────────────────────────────────────────────────
 
@@ -470,10 +470,9 @@
   // ── Submit unanswered question to Google Sheets ──────────────
   async function submitUnanswered(question) {
     try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ question }),
-        headers: { 'Content-Type': 'application/json' }
+      await fetch(APPS_SCRIPT_URL + '?action=submit&question=' + encodeURIComponent(question), {
+        method: 'GET',
+        mode: 'no-cors'
       });
     } catch (err) {
       console.error('Failed to submit unanswered question:', err);

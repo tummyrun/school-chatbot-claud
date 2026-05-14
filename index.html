@@ -438,33 +438,58 @@
     return str.toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  function matchesEntry(input, entry) {
+  // Score how well an entry matches the input
+  function scoreEntry(input, entry) {
     const lower = input.toLowerCase();
-    return entry.keywords.some(kw => lower.includes(kw.toLowerCase()));
-  }
-
-  function partialMatchesEntry(input, entry) {
     const inputWords = getWords(input);
-    return entry.keywords.some(kw =>
-      inputWords.some(word =>
-        kw.toLowerCase().includes(word) || word.includes(kw.toLowerCase().split(' ')[0])
-      )
-    );
+    let score = 0;
+    for (const kw of entry.keywords) {
+      const kwLower = kw.toLowerCase();
+      // Full phrase match — highest score
+      if (lower.includes(kwLower)) {
+        score += kwLower.split(' ').length * 2;
+      } else {
+        // Partial word match — lower score
+        for (const word of inputWords) {
+          if (kwLower.includes(word) || word.includes(kwLower.split(' ')[0])) {
+            score += 1;
+          }
+        }
+      }
+    }
+    return score;
   }
 
   function getResult(input) {
-    // 1. Full match
-    for (const entry of keywordData) {
-      if (matchesEntry(input, entry)) {
-        return { type: 'answer', text: entry.response };
-      }
-    }
-    // 2. Partial match
-    const partial = keywordData.filter(e => partialMatchesEntry(input, e));
-    if (partial.length > 0) return { type: 'suggest', matches: partial };
+    // Score all entries
+    const scored = keywordData
+      .map(entry => ({ entry, score: scoreEntry(input, entry) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score);
 
-    // 3. No match — fallback
-    return { type: 'fallback' };
+    // No match at all
+    if (scored.length === 0) return { type: 'fallback' };
+
+    // Only one match
+    if (scored.length === 1) {
+      return { type: 'answer', text: scored[0].entry.response };
+    }
+
+    // Multiple matches — check if top scores are close (multiple keywords detected)
+    const topScore = scored[0].score;
+    const allTopMatches = scored.filter(item => item.score >= topScore * 0.6);
+
+    if (allTopMatches.length > 1) {
+      // Multiple keywords detected — answer the best one and notify student
+      return {
+        type: 'multi',
+        best: allTopMatches[0].entry,
+        others: allTopMatches.slice(1)
+      };
+    }
+
+    // One clear winner
+    return { type: 'answer', text: scored[0].entry.response };
   }
 
   // ── Submit unanswered question to Google Sheets ──────────────
@@ -570,6 +595,17 @@
       if (result.type === 'answer') {
         addMessage(result.text, 'bot');
 
+      } else if (result.type === 'multi') {
+        // Answer the best match first
+        addMessage(result.best.response, 'bot');
+        // Then show a notice + other matched questions as chips
+        addSuggestions(
+          result.others,
+          "💬 It looks like you asked multiple questions! I've answered the most relevant one. Feel free to ask your other question!",
+          false,
+          text
+        );
+
       } else if (result.type === 'suggest') {
         addSuggestions(
           result.matches,
@@ -601,4 +637,3 @@
 
 </body>
 </html>
-

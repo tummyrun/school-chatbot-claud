@@ -470,26 +470,34 @@
     // No match at all
     if (scored.length === 0) return { type: 'fallback' };
 
-    // Only one match
+    // Only one keyword match — answer directly
     if (scored.length === 1) {
       return { type: 'answer', text: scored[0].entry.response };
     }
 
-    // Multiple matches — check if top scores are close (multiple keywords detected)
+    // Multiple keyword matches found
     const topScore = scored[0].score;
-    const allTopMatches = scored.filter(item => item.score >= topScore * 0.6);
+    const multiMatches = scored.filter(item => item.score >= topScore * 0.6);
 
-    if (allTopMatches.length > 1) {
-      // Multiple keywords detected — answer the best one and notify student
-      return {
-        type: 'multi',
-        best: allTopMatches[0].entry,
-        others: allTopMatches.slice(1)
-      };
+    if (multiMatches.length === 1) {
+      // Multiple keywords found but only one clear winner — answer directly
+      return { type: 'answer', text: multiMatches[0].entry.response };
     }
 
-    // One clear winner
-    return { type: 'answer', text: scored[0].entry.response };
+    // Multiple keywords AND multiple answers — check if responses differ
+    const uniqueResponses = [...new Set(multiMatches.map(m => m.entry.response))];
+
+    if (uniqueResponses.length === 1) {
+      // Multiple keywords but all point to the same answer — just answer
+      return { type: 'answer', text: uniqueResponses[0] };
+    }
+
+    // Truly multiple different answers — answer best score + notify
+    return {
+      type: 'multi',
+      best: multiMatches[0].entry,
+      others: multiMatches.slice(1)
+    };
   }
 
   // ── Submit unanswered question to Google Sheets ──────────────

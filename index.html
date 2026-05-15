@@ -470,30 +470,29 @@
     // No match at all
     if (scored.length === 0) return { type: 'fallback' };
 
-    // Only one keyword match — answer directly
+    // Only one entry scored
     if (scored.length === 1) {
       return { type: 'answer', text: scored[0].entry.response };
     }
 
-    // Multiple keyword matches found
+    // Use a strict threshold — only include entries with at least 50% of top score
+    // AND a minimum score of 2 to avoid weak partial matches
     const topScore = scored[0].score;
-    const multiMatches = scored.filter(item => item.score >= topScore * 0.4);
+    const multiMatches = scored.filter(item => item.score >= Math.max(2, topScore * 0.5));
 
+    // Only one entry passes threshold — answer directly
     if (multiMatches.length === 1) {
-      // Multiple keywords found but only one clear winner — answer directly
       return { type: 'answer', text: multiMatches[0].entry.response };
     }
 
-    // Multiple keywords AND multiple answers — check if responses differ
+    // Check if all passing entries share the same response
     const uniqueResponses = [...new Set(multiMatches.map(m => m.entry.response))];
 
     if (uniqueResponses.length === 1) {
-      // Multiple keywords but all point to the same answer — just answer
       return { type: 'answer', text: uniqueResponses[0] };
     }
 
-    // Truly multiple different answers — answer best score + notify
-    // Filter others to only show entries with different responses from best
+    // Multiple genuinely different answers detected
     const bestResponse = multiMatches[0].entry.response;
     const others = multiMatches.slice(1).filter(m => m.entry.response !== bestResponse);
 

@@ -443,7 +443,9 @@
     const lower = input.toLowerCase();
     const inputWords = getWords(input);
     let score = 0;
-    for (const kw of entry.keywords) {
+    const kws = Array.isArray(entry.keywords) ? entry.keywords : [entry.keyword || ''];
+    for (const kw of kws) {
+      if (!kw) continue;
       const kwLower = kw.toLowerCase();
       // Full phrase match — highest score
       if (lower.includes(kwLower)) {
@@ -467,6 +469,8 @@
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score);
 
+    console.log('Scored entries:', scored.map(s => ({ keywords: s.entry.keywords, score: s.score, response: s.entry.response })));
+
     // No match at all
     if (scored.length === 0) return { type: 'fallback' };
 
@@ -475,12 +479,16 @@
       return { type: 'answer', text: scored[0].entry.response };
     }
 
-    // Use a strict threshold — only include entries with at least 50% of top score
-    // AND a minimum score of 2 to avoid weak partial matches
+    // Only keep entries whose score is within 70% of the top score
+    // AND has a minimum score of 2 to filter out accidental partial matches
     const topScore = scored[0].score;
-    const multiMatches = scored.filter(item => item.score >= Math.max(2, topScore * 0.5));
+    const multiMatches = scored.filter(item =>
+      item.score >= 2 && item.score >= topScore * 0.7
+    );
 
-    // Only one entry passes threshold — answer directly
+    console.log('Multi matches after filter:', multiMatches.map(s => ({ keywords: s.entry.keywords, score: s.score })));
+
+    // Only one entry passes — answer directly
     if (multiMatches.length === 1) {
       return { type: 'answer', text: multiMatches[0].entry.response };
     }
@@ -495,6 +503,8 @@
     // Multiple genuinely different answers detected
     const bestResponse = multiMatches[0].entry.response;
     const others = multiMatches.slice(1).filter(m => m.entry.response !== bestResponse);
+
+    console.log('MULTI triggered! Best:', multiMatches[0].entry.keywords, 'Others:', others.map(o => o.entry.keywords));
 
     return {
       type: 'multi',
@@ -593,8 +603,9 @@
     let chipsHtml = '';
     if (others && others.length > 0) {
       const chips = others.map(function(m) {
-        const label = m.question || m.keywords[0];
-        const kw = m.keywords[0];
+        const kws = Array.isArray(m.keywords) ? m.keywords : [m.keyword || ''];
+        const kw = kws[0] || '';
+        const label = m.question || kw;
         return '<button class="suggestion-chip" onclick="sendHint(\'' + kw + '\')">' + label + '</button>';
       }).join('');
       chipsHtml = '<div class="suggestions"><span class="suggestions-label">Other questions</span>' + chips + '</div>';

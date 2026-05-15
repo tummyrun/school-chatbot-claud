@@ -645,19 +645,9 @@
       } else if (result.type === 'multi') {
         // Answer the best match first
         addMessage(result.best.response, 'bot');
-        // Always show the reply message, with chips if others exist
-        const multiBox = document.getElementById('messages');
-        const multiRow = document.createElement('div');
-        multiRow.className = 'msg-row bot';
-        const multiChips = result.others.map(m =>
-          '<button class="suggestion-chip" onclick="sendHint(\'' + m.keywords[0] + '\')">\' + (m.question || m.keywords[0]) + \'</button>'
-        ).join('');
-        const chipsSection = multiChips
-          ? '<div class="suggestions"><span class="suggestions-label">Other questions</span>' + multiChips + '</div>'
-          : '';
-        multiRow.innerHTML = '<div class="bubble">💬 It looks like you asked multiple questions! I\'ve answered the most relevant one. Feel free to ask your other question!' + chipsSection + '</div>';
-        multiBox.appendChild(multiRow);
-        multiBox.scrollTop = multiBox.scrollHeight;
+        // Show reply with other question chips
+        addMultiReply(result.others);
+
 
       } else if (result.type === 'suggest') {
         addSuggestions(

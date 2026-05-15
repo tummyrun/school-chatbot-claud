@@ -498,15 +498,18 @@
     }
 
     // Multiple genuinely different answers detected
-    const bestResponse = multiMatches[0].entry.response;
-    const others = multiMatches.slice(1).filter(m => m.entry.response !== bestResponse);
+    const bestEntry = multiMatches[0].entry;
+    const bestResponse = bestEntry.response;
+    const otherEntries = multiMatches.slice(1)
+      .filter(m => m.entry.response !== bestResponse)
+      .map(m => m.entry);
 
-    console.log('MULTI triggered! Best:', multiMatches[0].entry.keywords, 'Others:', others.map(o => o.entry.keywords));
+    console.log('MULTI triggered! Best:', bestEntry.keywords, 'Others:', otherEntries.map(o => o.keywords));
 
     return {
       type: 'multi',
-      best: multiMatches[0].entry,
-      others: others
+      best: bestEntry,
+      others: otherEntries
     };
   }
 
@@ -557,9 +560,13 @@
     const row = document.createElement('div');
     row.className = 'msg-row bot';
 
-    const chips = matches.map(m =>
-      `<button class="suggestion-chip" onclick="sendHint('${m.keywords[0]}')">${m.question}</button>`
-    ).join('');
+    const chips = matches.map(m => {
+      const entry = m.entry || m;
+      const kws = Array.isArray(entry.keywords) ? entry.keywords : [entry.keyword || ''];
+      const kw = kws[0] || '';
+      const label = entry.question || kw;
+      return `<button class="suggestion-chip" onclick="sendHint('${kw}')">${label}</button>`;
+    }).join('');
 
     const submitHtml = showSubmit
       ? `<div class="submit-row">

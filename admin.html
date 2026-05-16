@@ -478,10 +478,14 @@
         </div>
 
         <!-- Add new -->
-        <div class="add-form">
+        <div class="add-form" style="grid-template-columns: 1fr 1fr 1.5fr auto;">
           <div class="form-group">
-            <label>Keyword</label>
-            <input id="newKeyword" type="text" placeholder="e.g. schedule" />
+            <label>KW1 (optional)</label>
+            <input id="newKw1" type="text" placeholder="e.g. time" />
+          </div>
+          <div class="form-group">
+            <label>KW2 (subject)</label>
+            <input id="newKw2" type="text" placeholder="e.g. school starts" />
           </div>
           <div class="form-group">
             <label>Response</label>
@@ -492,7 +496,8 @@
 
         <!-- Table header -->
         <div class="keyword-row header">
-          <span>Keyword</span>
+          <span>KW1 (context)</span>
+          <span>KW2 (subject)</span>
           <span>Response</span>
           <span>Edit</span>
           <span>Delete</span>
@@ -536,7 +541,7 @@
 
 <script>
   // ── CONFIG ────────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwv5CPhIBL9-qTwOBS29_Fn5TT8RxqrqvB9_86Gxnu374-095mLnITTQCqzvkV3RWBUmQ/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzA8j-XzEYF-GrBXbkL9pdc86P6dpc2vuQ1vQdd9H5IkURCP8TPBApbbCIUaNxw-FQgRQ/exec";
   const ADMIN_PASSWORD  = "admin1234"; // ← change this to your own password!
   // ─────────────────────────────────────────────────────────────
 
@@ -594,11 +599,15 @@
         list.innerHTML = '<div class="empty-state"><div class="icon">📭</div>No keywords yet. Add one above!</div>';
         return;
       }
-      list.innerHTML = data.map(item => `
-        <div class="keyword-row" id="row-${item.row}">
+      list.innerHTML = data.map(function(item) { return `
+        <div class="keyword-row" id="row-${item.row}" style="grid-template-columns:1fr 1fr 1.5fr auto auto;">
           <div>
-            <span class="cell-keyword" id="kw-display-${item.row}">${item.keyword}</span>
-            <input class="edit-input" id="kw-input-${item.row}" value="${item.keyword}" style="display:none"/>
+            <span class="cell-keyword" id="kw1-display-${item.row}">${item.kw1 || '<span style="color:#ccc">—</span>'}</span>
+            <input class="edit-input" id="kw1-input-${item.row}" value="${item.kw1 || ''}" placeholder="optional" style="display:none"/>
+          </div>
+          <div>
+            <span class="cell-keyword" id="kw2-display-${item.row}">${item.kw2}</span>
+            <input class="edit-input" id="kw2-input-${item.row}" value="${item.kw2}" style="display:none"/>
           </div>
           <div>
             <span class="cell-response" id="res-display-${item.row}">${item.response}</span>
@@ -612,37 +621,42 @@
             <button class="btn btn-danger" onclick="deleteKeyword(${item.row})">Delete</button>
           </div>
         </div>
-      `).join('');
+      `; }).join('');
     } catch(e) {
       list.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div>Failed to load. Check your connection.</div>';
     }
   }
 
   async function addKeyword() {
-    const kw  = document.getElementById('newKeyword').value.trim();
-    const res = document.getElementById('newResponse').value.trim();
-    if (!kw || !res) return showToast('Please fill in both fields!');
-    await api({ action: 'add', keyword: kw, response: res });
-    document.getElementById('newKeyword').value = '';
+    const kw1 = document.getElementById('newKw1').value.trim();
+    const kw2 = document.getElementById('newKw2').value.trim();
+    const res  = document.getElementById('newResponse').value.trim();
+    if (!kw2 || !res) return showToast('KW2 and Response are required!');
+    await api({ action: 'add', kw1, kw2, response: res });
+    document.getElementById('newKw1').value = '';
+    document.getElementById('newKw2').value = '';
     document.getElementById('newResponse').value = '';
     showToast('✅ Keyword added!');
     loadKeywords();
   }
 
   function startEdit(row) {
-    document.getElementById('kw-display-' + row).style.display  = 'none';
+    document.getElementById('kw1-display-' + row).style.display = 'none';
+    document.getElementById('kw2-display-' + row).style.display = 'none';
     document.getElementById('res-display-' + row).style.display = 'none';
-    document.getElementById('kw-input-' + row).style.display    = 'block';
+    document.getElementById('kw1-input-' + row).style.display   = 'block';
+    document.getElementById('kw2-input-' + row).style.display   = 'block';
     document.getElementById('res-input-' + row).style.display   = 'block';
     document.getElementById('edit-btn-' + row).style.display    = 'none';
     document.getElementById('save-btn-' + row).style.display    = 'inline-block';
   }
 
   async function saveEdit(row) {
-    const kw  = document.getElementById('kw-input-' + row).value.trim();
-    const res = document.getElementById('res-input-' + row).value.trim();
-    if (!kw || !res) return showToast('Fields cannot be empty!');
-    await api({ action: 'update', row, keyword: kw, response: res });
+    const kw1 = document.getElementById('kw1-input-' + row).value.trim();
+    const kw2 = document.getElementById('kw2-input-' + row).value.trim();
+    const res  = document.getElementById('res-input-' + row).value.trim();
+    if (!kw2 || !res) return showToast('KW2 and Response cannot be empty!');
+    await api({ action: 'update', row, kw1, kw2, response: res });
     showToast('✅ Updated!');
     loadKeywords();
   }

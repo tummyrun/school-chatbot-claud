@@ -384,11 +384,11 @@
 
 <script>
   // ─── CONFIG ───────────────────────────────────────────────────
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwv5CPhIBL9-qTwOBS29_Fn5TT8RxqrqvB9_86Gxnu374-095mLnITTQCqzvkV3RWBUmQ/exec";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzA8j-XzEYF-GrBXbkL9pdc86P6dpc2vuQ1vQdd9H5IkURCP8TPBApbbCIUaNxw-FQgRQ/exec";
   const TOP_FALLBACK_COUNT = 3;
   // ──────────────────────────────────────────────────────────────
 
-  let keywordData = []; // loaded from Google Sheets
+  let keywordData = []; // loaded from Google Sheets — each row: { kw1, kw2, response }
 
   // ── Load data from Google Sheets on startup ──────────────────
   async function loadKeywords() {
@@ -396,23 +396,19 @@
       const res = await fetch(APPS_SCRIPT_URL);
       const data = await res.json();
 
-      // Group rows by response so multiple keywords share one entry
-      const grouped = {};
-      data.forEach(({ keyword, response }) => {
-        if (!grouped[response]) {
-          grouped[response] = { keywords: [], question: keyword, response };
-        }
-        grouped[response].keywords.push(keyword);
-      });
-
-      keywordData = Object.values(grouped);
+      // Store each row as-is: { kw1, kw2, response }
+      keywordData = data.map(row => ({
+        kw1: (row.kw1 || '').toString().trim().toLowerCase(),
+        kw2: (row.kw2 || '').toString().trim().toLowerCase(),
+        response: (row.response || '').toString().trim()
+      })).filter(row => row.kw2 && row.response);
 
       // Clear loading message and show welcome
       const box = document.getElementById('messages');
       box.innerHTML = '';
       addMessage("Hello! I'm your Student Assistant. Feel free to ask me anything about the school.", 'bot');
 
-      // Build quick reply buttons from first 3 entries
+      // Build quick reply buttons from first 3 kw2 only entries
       buildQuickBar();
 
       document.getElementById('userInput').disabled = false;
@@ -428,9 +424,10 @@
 
   function buildQuickBar() {
     const bar = document.getElementById('quickBar');
-    const top = keywordData.slice(0, 3);
-    bar.innerHTML = `<span class="quick-label">Quick questions</span>` +
-      top.map(e => `<button class="quick-btn" onclick="sendHint('${e.keywords[0]}')">${e.question}</button>`).join('');
+    // Show first 3 kw2-only entries (no kw1) as quick buttons
+    const standalone = keywordData.filter(r => !r.kw1).slice(0, 3);
+    bar.innerHTML = '<span class="quick-label">Quick questions</span>' +
+      standalone.map(r => '<button class="quick-btn" onclick="sendHint('' + r.kw2 + '')">' + r.kw2 + '</button>').join('');
   }
 
   // ── Matching logic ───────────────────────────────────────────
@@ -438,79 +435,100 @@
     return str.toLowerCase().split(/\s+/).filter(Boolean);
   }
 
-  // Score how well an entry matches the input
-  function scoreEntry(input, entry) {
-    const lower = input.toLowerCase();
-    const inputWords = getWords(input);
-    let score = 0;
-    const kws = Array.isArray(entry.keywords) ? entry.keywords : [entry.keyword || ''];
-    for (const kw of kws) {
-      if (!kw) continue;
-      const kwLower = kw.toLowerCase();
-      // Full phrase match — highest score
-      if (lower.includes(kwLower)) {
-        score += kwLower.split(' ').length * 2;
-      } else {
-        // Partial word match — lower score
-        for (const word of inputWords) {
-          if (kwLower.includes(word) || word.includes(kwLower.split(' ')[0])) {
-            score += 1;
-          }
-        }
-      }
-    }
-    return score;
+  function inputContains(input, keyword) {
+    if (!keyword) return false;
+    return input.toLowerCase().includes(keyword.toLowerCase());
   }
 
   function getResult(input) {
-    // Score all entries
-    const scored = keywordData
-      .map(entry => ({ entry, score: scoreEntry(input, entry) }))
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score);
+    const lower = input.toLowerCase();
 
-    console.log('Scored entries:', scored.map(s => ({ keywords: s.entry.keywords, score: s.score, response: s.entry.response })));
+    // Step 1: Find all kw1 matches in input
+    const kw1Matches = [...new Set(
+      keywordData
+        .map(r => r.kw1)
+        .filter(k => k && lower.includes(k))
+    )];
 
-    // No match at all
-    if (scored.length === 0) return { type: 'fallback' };
+    // Step 2: Find all kw2 matches in input
+    const kw2Matches = [...new Set(
+      keywordData
+        .map(r => r.kw2)
+        .filter(k => k && lower.includes(k))
+    )];
 
-    // Only one entry scored
-    if (scored.length === 1) {
-      return { type: 'answer', text: scored[0].entry.response };
+    const hasKw1 = kw1Matches.length > 0;
+    const hasKw2 = kw2Matches.length > 0;
+
+    // Case A: kw1 found
+    if (hasKw1) {
+      if (hasKw2) {
+        // Try to find rows matching kw1 + kw2 combination
+        const matched = keywordData.filter(r =>
+          r.kw1 && kw1Matches.includes(r.kw1) &&
+          r.kw2 && kw2Matches.includes(r.kw2)
+        );
+
+        if (matched.length === 0) {
+          // kw1 found but kw2 doesn't pair with it — ask to clarify
+          return { type: 'unclear' };
+        }
+
+        if (matched.length === 1) {
+          return { type: 'answer', text: matched[0].response };
+        }
+
+        // Multiple matches — check unique responses
+        const uniqueRes = [...new Set(matched.map(r => r.response))];
+        if (uniqueRes.length === 1) {
+          return { type: 'answer', text: uniqueRes[0] };
+        }
+
+        // Multiple different answers — answer best + show others
+        return {
+          type: 'multi',
+          best: matched[0],
+          others: matched.slice(1).filter(r => r.response !== matched[0].response)
+        };
+
+      } else {
+        // kw1 found but no kw2 — show all related kw2 options
+        const related = keywordData.filter(r =>
+          r.kw1 && kw1Matches.includes(r.kw1)
+        );
+        return { type: 'needKw2', related };
+      }
     }
 
-    // Keep entries with at least 30% of the top score to catch multi-keyword sentences
-    const topScore = scored[0].score;
-    const multiMatches = scored.filter(item => item.score >= topScore * 0.3);
+    // Case B: No kw1 — look for standalone kw2 (no kw1 required)
+    if (hasKw2) {
+      const matched = keywordData.filter(r =>
+        !r.kw1 && r.kw2 && kw2Matches.includes(r.kw2)
+      );
 
-    console.log('Multi matches after filter:', multiMatches.map(s => ({ keywords: s.entry.keywords, score: s.score })));
+      if (matched.length === 0) {
+        // kw2 found but it requires kw1 — ask to clarify
+        return { type: 'unclear' };
+      }
 
-    // Only one entry passes — answer directly
-    if (multiMatches.length === 1) {
-      return { type: 'answer', text: multiMatches[0].entry.response };
+      if (matched.length === 1) {
+        return { type: 'answer', text: matched[0].response };
+      }
+
+      const uniqueRes = [...new Set(matched.map(r => r.response))];
+      if (uniqueRes.length === 1) {
+        return { type: 'answer', text: uniqueRes[0] };
+      }
+
+      return {
+        type: 'multi',
+        best: matched[0],
+        others: matched.slice(1).filter(r => r.response !== matched[0].response)
+      };
     }
 
-    // Check if all passing entries share the same response
-    const uniqueResponses = [...new Set(multiMatches.map(m => m.entry.response))];
-
-    if (uniqueResponses.length === 1) {
-      return { type: 'answer', text: uniqueResponses[0] };
-    }
-
-    // Multiple genuinely different answers detected
-    const bestEntry = multiMatches[0].entry;
-    const bestResponse = bestEntry.response;
-    const otherEntries = multiMatches.slice(1)
-      .filter(m => m.entry.response !== bestResponse)
-      .map(m => m.entry);
-
-    console.log('MULTI triggered! Best:', bestEntry.keywords, 'Others:', otherEntries.map(o => o.keywords));
-
-    return {
-      type: 'multi',
-      best: bestEntry,
-      others: otherEntries
-    };
+    // Case C: Nothing matched
+    return { type: 'fallback' };
   }
 
   // ── Submit unanswered question to Google Sheets ──────────────
@@ -643,22 +661,27 @@
         addMessage(result.text, 'bot');
 
       } else if (result.type === 'multi') {
-        // Answer the best match first
+        // Answer best match + show others
         addMessage(result.best.response, 'bot');
-        // Show reply with other question chips
         addMultiReply(result.others);
 
+      } else if (result.type === 'needKw2') {
+        // kw1 found but no kw2 — show related options as chips
+        const chips = result.related.map(r =>
+          '<button class="suggestion-chip" onclick="sendHint('' + r.kw2 + '')">' + r.kw2 + '</button>'
+        ).join('');
+        const box = document.getElementById('messages');
+        const row = document.createElement('div');
+        row.className = 'msg-row bot';
+        row.innerHTML = '<div class="bubble">Could you be more specific? What would you like to know?<div class="suggestions"><span class="suggestions-label">Choose one</span>' + chips + '</div></div>';
+        box.appendChild(row);
+        box.scrollTop = box.scrollHeight;
 
-      } else if (result.type === 'suggest') {
-        addSuggestions(
-          result.matches,
-          "I'm not sure what you mean. Did you mean one of these?",
-          true,
-          text
-        );
+      } else if (result.type === 'unclear') {
+        addMessage("I'm not sure I understand. Could you please rephrase your question?", 'bot');
 
       } else {
-        const fallback = keywordData.slice(0, TOP_FALLBACK_COUNT);
+        const fallback = keywordData.filter(r => !r.kw1).slice(0, TOP_FALLBACK_COUNT);
         addSuggestions(
           fallback,
           "I couldn't find anything related to that. Here are some things I can help with:",

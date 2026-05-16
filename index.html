@@ -668,7 +668,7 @@
       } else if (result.type === 'needKw2') {
         // kw1 found but no kw2 — show related options as chips
         const chips = result.related.map(r =>
-          '<button class="suggestion-chip" onclick="sendHint('' + r.kw2 + '')">' + r.kw2 + '</button>'
+          '<button class="suggestion-chip" onclick="sendHint(\'' + r.kw2 + '\')">'+r.kw2+'</button>'
         ).join('');
         const box = document.getElementById('messages');
         const row = document.createElement('div');

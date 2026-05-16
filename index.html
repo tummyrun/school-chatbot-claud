@@ -690,7 +690,7 @@
         }).join('');
         const safeText = text.replace(/'/g, "\'");
         const submitHtml = '<div class="submit-row"><button class="submit-btn" onclick="handleSubmitUnanswered(\'' + safeText + '\', this)">📩 Submit this question to the team</button></div>';
-        row.innerHTML = '<div class="bubble">We don't have the answer for that question just yet. Please submit your question for our future improvement!' +
+        row.innerHTML = '<div class="bubble">We don\'t have the answer for that question just yet. Please submit your question for our future improvement!' +
           (chips ? '<div class="suggestions"><span class="suggestions-label">Or try these</span>' + chips + '</div>' : '') +
           submitHtml + '</div>';
         box.appendChild(row);

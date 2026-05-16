@@ -427,7 +427,7 @@
     // Show first 3 kw2-only entries (no kw1) as quick buttons
     const standalone = keywordData.filter(r => !r.kw1).slice(0, 3);
     bar.innerHTML = '<span class="quick-label">Quick questions</span>' +
-      standalone.map(r => '<button class="quick-btn" onclick="sendHint('' + r.kw2 + '')">' + r.kw2 + '</button>').join('');
+      standalone.map(function(r) { return '<button class="quick-btn" onclick="sendHint(\'' + r.kw2 + '\')">'+r.kw2+'</button>'; }).join('');
   }
 
   // ── Matching logic ───────────────────────────────────────────

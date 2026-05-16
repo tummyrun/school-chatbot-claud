@@ -682,12 +682,19 @@
 
       } else {
         const fallback = keywordData.filter(r => !r.kw1).slice(0, TOP_FALLBACK_COUNT);
-        addSuggestions(
-          fallback,
-          "I couldn't find anything related to that. Here are some things I can help with:",
-          true,
-          text
-        );
+        const box = document.getElementById('messages');
+        const row = document.createElement('div');
+        row.className = 'msg-row bot';
+        const chips = fallback.map(function(r) {
+          return '<button class="suggestion-chip" onclick="sendHint(\'' + r.kw2 + '\')">' + r.kw2 + '</button>';
+        }).join('');
+        const safeText = text.replace(/'/g, "\'");
+        const submitHtml = '<div class="submit-row"><button class="submit-btn" onclick="handleSubmitUnanswered(\'' + safeText + '\', this)">📩 Submit this question to the team</button></div>';
+        row.innerHTML = '<div class="bubble">We don't have the answer for that question just yet. Please submit your question for our future improvement!' +
+          (chips ? '<div class="suggestions"><span class="suggestions-label">Or try these</span>' + chips + '</div>' : '') +
+          submitHtml + '</div>';
+        box.appendChild(row);
+        box.scrollTop = box.scrollHeight;
       }
     }, 900);
   }
